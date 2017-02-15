@@ -48,8 +48,9 @@ md* fill_md_block(md* newMdPtr, const char* fileName, const int fileSize, const 
 		.rwef = 1110,
 		.valid = 1
 	};
+	newMd.spareSize = fileSize/SPARE_SIZE_PROPORTION;
 	strcpy(newMd.name, fileName);
-	printf("[NEW MD ENTRY] New file created as {name: %s, size: %d, firstByteOffset: %d}\n", newMd.name, newMd.size, newMd.firstByteOffset);
+	printf("[MD NEW] New file created as {name: %s, size: %d (+%d), firstByteOffset: %d}\n", newMd.name, newMd.size, newMd.spareSize, newMd.firstByteOffset);
 	return memcpy(newMdPtr, &newMd, sizeof(md));
 }
 
@@ -67,7 +68,7 @@ md_snap* create_sorted_md_snaps(md* ptnPtr, int numOfValidFiles){
 		if(mdPtr[i].valid == 1){
 			strcpy(mdSnapsPtr[snapsIdx].name, mdPtr[i].name);
 			mdSnapsPtr[snapsIdx].firstByteOffset = mdPtr[i].firstByteOffset;
-			mdSnapsPtr[snapsIdx].lastByteOffset = mdPtr[i].firstByteOffset + mdPtr[i].size;
+			mdSnapsPtr[snapsIdx].lastByteOffset = mdPtr[i].firstByteOffset + mdPtr[i].size + mdPtr[i].spareSize;
 			snapsIdx++;
 		}
 	}
@@ -105,7 +106,7 @@ char* convert_offset_to_curr_pos_ptr(void* ptnPtr, file_handler* fileHandlerPtr)
 }
 
 // Given a fileHandler, calculate the remaining bytes between
-// the handler's position and the EOF of a file.
+// the handler's position and the EOF of a file (excludes spare size!).
 int calculate_bytes_to_EOF(file_handler* fileHandlerPtr){
 	return fileHandlerPtr->firstByteOffset + fileHandlerPtr->size - fileHandlerPtr->handlingOffset;
 }
@@ -123,8 +124,13 @@ void list_files_in_order(void* ptnPtr){
 	printf("\n");
 }
 
+void print_md(md* mdPtr){
+	printf("[MD UPDATE] File is now {name: %s, size: %d (+%d), firstByteOffset: %d}\n", mdPtr->name, mdPtr->size, mdPtr->spareSize, mdPtr->firstByteOffset);
+}
+
 // Defragments the entire partition
 int defragment(void* ptnPtr){
+	printf("[DEFRAG] Defragmenting...\n");
 	// Get partition metadata; an array of md_snaps
 	int numOfValidFiles = count_valid_md_blocks(ptnPtr);
 	md_snap* mdSnapsPtr = create_sorted_md_snaps(ptnPtr, numOfValidFiles);
@@ -145,24 +151,37 @@ int defragment(void* ptnPtr){
 
 		if(defragmenterOffset < mdSnapsPtr[i].firstByteOffset){
 			
-			printf("Matching filePtr name: %s, size: %d\n", fileMdPtr->name, fileMdPtr->size);
+			printf("[DEFRAG] Pull required. Expanded file is: {name: %s, size: %d (+%d)}\n", fileMdPtr->name, fileMdPtr->size, fileMdPtr->spareSize);
 			// 2. Create ptr to the file's first byte
 			char* fileFirstBytePtr = ((char*) ptnPtr) + mdSnapsPtr[i].firstByteOffset;
 			// 3. Pull file data closer to the front of file storage
-			memmove(defragmenterPtr, fileFirstBytePtr, fileMdPtr->size);
+			memmove(defragmenterPtr, fileFirstBytePtr, fileMdPtr->size + fileMdPtr->spareSize);
 			printf("[DEFRAG] Pulling file %s forward from offset %d to offset %d\n", mdSnapsPtr[i].name, mdSnapsPtr[i].firstByteOffset, defragmenterOffset);
 			// 4. Update the associated md block 
 			fileMdPtr->firstByteOffset = defragmenterOffset;
 			// 5. Update defragmenter and iterate...
-			defragmenterOffset += fileMdPtr->size;
-			defragmenterPtr += fileMdPtr->size;
+			defragmenterOffset += fileMdPtr->size + fileMdPtr->spareSize;
+			defragmenterPtr += fileMdPtr->size + fileMdPtr->spareSize;
 		} else if (defragmenterOffset == mdSnapsPtr[i].firstByteOffset) {
-			defragmenterOffset += fileMdPtr->size;
-			defragmenterPtr += fileMdPtr->size;
+			defragmenterOffset += fileMdPtr->size + fileMdPtr->spareSize;
+			defragmenterPtr += fileMdPtr->size + fileMdPtr->spareSize;
 		}
 	}
-	// Done using partition metadata, we free it
+	// Done using partition metadata, so we free it
 	free(mdSnapsPtr);
 	return 0;
+}
+
+int calculate_free_bytes(void* ptnPtr, int ptnSize){
+	md* mdPtr = (md*) ptnPtr;
+	int bytesUsed = MD_TABLE_SIZE;
+	for(int i=0; i<MAX_NUM_FILES; i++){
+		if(mdPtr[i].valid == 1){
+			bytesUsed += mdPtr[i].size + mdPtr[i].spareSize;
+		}
+	}
+	int bytesFree = ptnSize - bytesUsed;
+	printf("[DISK SPACE] Free bytes left on this partition: %d\n", bytesFree);
+	return bytesFree;
 }
 

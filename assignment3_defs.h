@@ -1,8 +1,3 @@
-// Macros
-#define MD_SIZE 			56
-#define MAX_NUM_FILES		10
-#define MD_TABLE_SIZE 		(MD_SIZE * MAX_NUM_FILES) // 560
-
 // Type definitions
 typedef struct {
 	void* first_partition;
@@ -39,6 +34,13 @@ typedef struct {
 	int handlingOffset;
 	char type;
 } file_handler;
+
+
+// Macros
+#define MAX_NUM_FILES		10 // up to user
+#define MD_TABLE_SIZE 		(sizeof(md) * MAX_NUM_FILES) // 560
+#define EXPECTED_PTN_SIZE	8192 // has to be greater than MD_TABLE_SIZE
+#define SPARE_SIZE_PROPORTION 5 // up to user. Spare size = 1/n of actual size
 
 
 // Function prototypes
