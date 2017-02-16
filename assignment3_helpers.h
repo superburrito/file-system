@@ -37,20 +37,26 @@ md* find_empty_md_block(void* ptnPtr){
 	}
 }
 
+
 // Fill up a md block with fresh data
-md* fill_md_block(md* newMdPtr, const char* fileName, const int fileSize, const int newFirstByteOffset){
+md* fill_md_block(md* newMdPtr, char* fileName, int fileSize, int newFirstByteOffset, md* immedParentMdPtr, int rwef){
 	md newMd = {
 		.createdAt = time(NULL),
 		.modifiedAt = time(NULL),
-		.parentMd = NULL,
+		.parentMdPtr = immedParentMdPtr,
 		.firstByteOffset = newFirstByteOffset,
 		.size = fileSize,
-		.rwef = 1110,
+		.rwef = rwef,
 		.valid = 1
 	};
-	newMd.spareSize = fileSize/SPARE_SIZE_PROPORTION;
+	// If folder, no need for spare space
+	if(rwef % 10 == 1){
+		newMd.spareSize = 0; 
+	} else {
+		newMd.spareSize = fileSize/SPARE_SIZE_PROPORTION;
+	}
 	strcpy(newMd.name, fileName);
-	printf("[MD NEW] New file created as {name: %s, size: %d (+%d), firstByteOffset: %d}\n", newMd.name, newMd.size, newMd.spareSize, newMd.firstByteOffset);
+	printf("[MD NEW] New file created as {name: %s, size: %d (+%d), firstByteOffset: %d, parentName(deferenced): %s}\n", newMd.name, newMd.size, newMd.spareSize, newMd.firstByteOffset, newMd.parentMdPtr->name);
 	return memcpy(newMdPtr, &newMd, sizeof(md));
 }
 
@@ -83,18 +89,41 @@ md_snap* create_sorted_md_snaps(md* ptnPtr, int numOfValidFiles){
 }
 
 
-// Given a filename, find a matching metadata block
-md* find_matching_md(void* ptnPtr, const char* fileName){
+// Given a filename, find a valid metadata block that matches
+md* find_matching_md(void* ptnPtr, char* fileName){
+	int matchingMdFound = 0;
 	md* mdPtr = (md*) ptnPtr;
 	for(int i=0; i<MAX_NUM_FILES; i++){
-		char* currName = mdPtr[i].name;
-		if(strcmp(fileName, currName) == 0 &&
+		if(strcmp(fileName, mdPtr[i].name) == 0 &&
 			mdPtr[i].valid == 1){
+			matchingMdFound++;
+			printf("[MD LOOKUP] Found %s.\n", fileName);
 			return &mdPtr[i]; 
 		}
 	}
+	printf("[MD LOOKUP] WARNING -- Metadata associated with %s not found.\n", fileName);
 }
 
+// Given a filename, count the number of valid metadata blocks that match.
+// The result should always be either 0 or 1
+int count_matching_md(void* ptnPtr, char* fileName){
+	int matchingMdFound = 0;
+	md* mdPtr = (md*) ptnPtr;
+	for(int i=0; i<MAX_NUM_FILES; i++){
+/*		printf("[MD LOOKUP] Comparing %s with %s whose validity is %d gives %d\n", fileName, mdPtr[i].name, mdPtr[i].valid, strcmp(fileName, mdPtr[i].name));*/
+		if(strcmp(fileName, mdPtr[i].name) == 0 &&
+			mdPtr[i].valid == 1){
+			matchingMdFound++;
+		}
+	}
+	assert(matchingMdFound == 0 || matchingMdFound == 1);
+	printf("[MD VERIFY] %d instance(s) of %s detected.\n", matchingMdFound, fileName);
+	return matchingMdFound;
+}
+
+void ensure_file_exists(void* ptnPtr, char* fileName){
+	assert(count_matching_md(ptnPtr, fileName) == 1);
+}
 
 // Helpers for reading and writing
 // Give a fileHandler, provide a pointer to the handler's 
@@ -117,7 +146,7 @@ void list_files_in_order(void* ptnPtr){
 	int numOfValidFiles = count_valid_md_blocks(ptnPtr);
 	md_snap* mdSnapsPtr = create_sorted_md_snaps(ptnPtr, numOfValidFiles);
 
-	printf("[LISTING FILES IN ORDER]");
+	printf("[LIST] Ordered list of files: ");
 	for(int i=0; i<numOfValidFiles; i++){
 		printf(" %s", mdSnapsPtr[i].name);
 	}
@@ -145,7 +174,7 @@ int defragment(void* ptnPtr){
 		// TEST: defragmenterOffset CANNOT be greater than the first byte 
 		// of the currently examined file OR the size of the ptn!
 		assert(defragmenterOffset <= mdSnapsPtr[i].firstByteOffset);
-		printf("[DEFRAG] Inspecting file: %s\n", mdSnapsPtr[i].name);
+		printf("[DEFRAG] Inspecting %s...\n", mdSnapsPtr[i].name);
 		// 1. Find the associated md block for the inspected file
 		md* fileMdPtr = find_matching_md(ptnPtr, mdSnapsPtr[i].name);
 
@@ -181,7 +210,124 @@ int calculate_free_bytes(void* ptnPtr, int ptnSize){
 		}
 	}
 	int bytesFree = ptnSize - bytesUsed;
-	printf("[DISK SPACE] Free bytes left on this partition: %d\n", bytesFree);
+	printf("[DISK SPACE] %d free bytes are left in this partition.\n", bytesFree);
 	return bytesFree;
 }
+
+
+// Helper that relies on primary functions
+// Recreates a file by storing its data, deleting it and re-creating it.
+// Invoked by move_to_partition and sometimes, extend_file
+int recreate(char* fileName, int recreatedSize, void* fromPtnPtr, void* toPtnPtr, int ptnSize){
+	printf("[RE-CREATE] Recreating %s...\n", fileName);
+	// 1. Reading and Copying
+	md* fileMdPtr = find_matching_md(fromPtnPtr, fileName);
+	int copySize = fileMdPtr->size;
+	int copyRwef = fileMdPtr->rwef;
+	char buffer[copySize];
+	file_handler* fileHandlerForReading = open_file(fileName, fromPtnPtr, 'r');
+	read_file(fileHandlerForReading, buffer, copySize, fromPtnPtr);
+	close_file(fileHandlerForReading);
+	// 2. Deleting
+	delete_file(fileName, fromPtnPtr);
+	// 3. Creating
+	create_file(fileName, recreatedSize, toPtnPtr, ptnSize, copyRwef);
+	// 4. Writing
+	file_handler* fileHandlerForWriting = open_file(fileName, toPtnPtr, 'w');
+	write_file(fileHandlerForWriting, buffer, copySize, toPtnPtr, ptnSize);
+	close_file(fileHandlerForWriting);
+	return 0;
+}
+
+
+// Give a filename, determines how many parents the file should have
+int count_parents(const char* fileName){
+	int ctr = 0;
+	for(int i=0; i<strlen(fileName); i++){
+		if(fileName[i] == '/'){
+			ctr++;
+		}
+	}
+	return ctr -1;
+}
+
+// Given a filename, checks if all parents above it exist.
+void check_parents(const char* fileName, void* ptnPtr, int numOfParents){
+	// strtok will modify the string passed to it, 
+	// so we make a copy of fileName  
+	char fileNameCopy[strlen(fileName)];
+	memset(fileNameCopy, '\0', strlen(fileName));
+	strcpy(fileNameCopy, fileName);
+
+	// Use a large parent dir buffer for us verify every parent 
+	// This buffer will "grow" from '/fd1' -> '/fd1/fd2' -> ...	
+	char parentNameBuffer[strlen(fileName)];
+	memset(parentNameBuffer, '\0', strlen(fileName));
+	
+	// Using strtok, concat each token to parentNameBuffer
+	// and inspect that string 	
+	char* token = strtok(fileNameCopy, "/");
+	int ctr = 0;
+	while(token != NULL && ctr < numOfParents){ // should use <, not <= 
+		strcat(parentNameBuffer, "/");
+		strcat(parentNameBuffer, token);
+		ensure_file_exists(ptnPtr, parentNameBuffer);
+		token = strtok(NULL, "/");
+		ctr++;
+	}
+}
+
+
+// Given a filename and a buffer, 
+// updates the buffer with the parent's path
+void get_parent_path(const char* fileName, char* parentNameBuffer, int numOfParents){
+	// strtok will modify the string passed to it, 
+	// so we make a copy of fileName  
+	char fileNameCopy[strlen(fileName)];
+	memset(fileNameCopy, '\0', strlen(fileName));
+	strcpy(fileNameCopy, fileName);
+
+	// Ensure that parentNameBuffer is "clean", no unwanted data
+	memset(parentNameBuffer, '\0', strlen(fileName));
+
+	// Using strtok, concat each token to parentNameBuffer 
+	char* token = strtok(fileNameCopy , "/");
+	int ctr = 0;
+	while(token != NULL && ctr < numOfParents){ // should use <, not <= 
+		strcat(parentNameBuffer, "/");
+		strcat(parentNameBuffer, token);
+		token = strtok(NULL, "/");
+		ctr++;
+	}
+
+	printf("[DIR CHECK] Immediate parent of %s is %s\n", fileName, parentNameBuffer); 
+}
+
+
+// Take a folderName and add childMdPtr
+void add_child_to_folder(char* folderName, void* ptnPtr, md* childMdPtr){
+	file_handler* folderHandlerPtr = open_file(folderName, ptnPtr, 'w');
+	char* charParserPtr = convert_offset_to_curr_pos_ptr(ptnPtr, folderHandlerPtr);
+	md** mdPtrParserPtr = (md**) charParserPtr; 
+	for(int i = 0; i < MAX_NUM_FILES; i++){
+		if(mdPtrParserPtr[i] == NULL || mdPtrParserPtr[i]->valid == 0){
+			mdPtrParserPtr[i] = childMdPtr;
+			break;
+		}		
+	}
+	close_file(folderHandlerPtr);
+}
+
+void delete_children_in_folder(char* folderName, void* ptnPtr){
+	file_handler* folderHandlerPtr = open_file(folderName, ptnPtr, 'w');
+	char* charParserPtr = convert_offset_to_curr_pos_ptr(ptnPtr, folderHandlerPtr);
+	md** mdPtrParserPtr = (md**) charParserPtr;
+	for(int i = 0; i < MAX_NUM_FILES; i++){
+		if(mdPtrParserPtr[i] != NULL && mdPtrParserPtr[i]->valid == 1){
+			delete_file(mdPtrParserPtr[i]->name, ptnPtr);
+			mdPtrParserPtr[i] = NULL;
+		}
+	}
+}
+
 
