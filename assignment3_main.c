@@ -63,16 +63,23 @@ int main(void){
 
 
 	printf("\n");
-	printf("***** MOVING A FILE TO ANOTHER PTN *****\n");
+	printf("***** MOVING /b.txt TO ANOTHER PARTITION *****\n");
 	move_to_partition("/b.txt", myFileSysPtr->first_partition, myFileSysPtr->second_partition, myFileSysPtr->size);
 	list_files_in_order(myFileSysPtr->first_partition);
 	list_files_in_order(myFileSysPtr->second_partition);
 
+	printf("\n");
+	printf("***** MOVING /f1/f2/a.txt TO /f1/a.txt *****\n");
+	new_parent("/f1/f2/a.txt", "/f1/f2", "/f1", myFileSysPtr->first_partition);
+	list_files_in_order(myFileSysPtr->first_partition);
+	list_files_in_order(myFileSysPtr->second_partition);
 
 	printf("\n");
-	printf("***** REMOVING FOLDER /f1 *****\n");
+	printf("***** REMOVING FOLDER /f1 (recursive) *****\n");
 	delete_file("/f1", myFileSysPtr->first_partition);
 	list_files_in_order(myFileSysPtr->first_partition);
+	list_files_in_order(myFileSysPtr->second_partition);
+
 
 	return 0;
 }

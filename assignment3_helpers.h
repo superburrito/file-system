@@ -303,8 +303,32 @@ void get_parent_path(const char* fileName, char* parentNameBuffer, int numOfPare
 	printf("[DIR CHECK] Immediate parent of %s is %s\n", fileName, parentNameBuffer); 
 }
 
+// Takes /f1/f2/a.txt and returns a.txt
+void get_last_path_segment(const char* fileName, char* lastPathSegmentBuffer){
+	// strtok will modify the string passed to it, 
+	// so we make a copy of fileName  
+	char fileNameCopy[strlen(fileName)];
+	memset(fileNameCopy, '\0', strlen(fileName));
+	strcpy(fileNameCopy, fileName);
 
-// Take a folderName and add childMdPtr
+	// Ensure that lastPathSegmentBuffer is "clean", no unwanted data
+	memset(lastPathSegmentBuffer, '\0', MAX_FILE_NAME_SIZE);
+	// Count parents
+	int numOfParents = count_parents(fileName);
+	// Keep strtok-ing until last segment 
+	char* token = strtok(fileNameCopy, "/");
+	int ctr = 0;
+	while(token != NULL){
+		if(ctr == numOfParents){
+			strcpy(lastPathSegmentBuffer, token);
+		}  
+		token = strtok(NULL, "/");
+		ctr++;
+	}
+	printf("[DIR CHECK] Last path segment of %s is %s\n", fileName, lastPathSegmentBuffer);
+}
+
+// Adds a child's metadata ptr inside a folder's internal storage
 void add_child_to_folder(char* folderName, void* ptnPtr, md* childMdPtr){
 	file_handler* folderHandlerPtr = open_file(folderName, ptnPtr, 'w');
 	char* charParserPtr = convert_offset_to_curr_pos_ptr(ptnPtr, folderHandlerPtr);
@@ -318,6 +342,23 @@ void add_child_to_folder(char* folderName, void* ptnPtr, md* childMdPtr){
 	close_file(folderHandlerPtr);
 }
 
+// Removes a child's metadata inside a folder's internal storage
+void remove_child_from_folder(char* folderName, void* ptnPtr, md* childMdPtr){
+	file_handler* folderHandlerPtr = open_file(folderName, ptnPtr, 'w');
+	char* charParserPtr = convert_offset_to_curr_pos_ptr(ptnPtr, folderHandlerPtr);
+	md** mdPtrParserPtr = (md**) charParserPtr; 
+	for(int i = 0; i < MAX_NUM_FILES; i++){
+		if(mdPtrParserPtr[i] != NULL &&
+		   mdPtrParserPtr[i]->valid == 1 &&
+		   mdPtrParserPtr[i]->name == childMdPtr->name){
+			mdPtrParserPtr[i] = NULL;
+			break;
+		}		
+	}
+	close_file(folderHandlerPtr);
+}
+
+// Nullifies all valid metadata ptrs inside a folder's internal storage 
 void delete_children_in_folder(char* folderName, void* ptnPtr){
 	file_handler* folderHandlerPtr = open_file(folderName, ptnPtr, 'w');
 	char* charParserPtr = convert_offset_to_curr_pos_ptr(ptnPtr, folderHandlerPtr);
@@ -329,5 +370,14 @@ void delete_children_in_folder(char* folderName, void* ptnPtr){
 		}
 	}
 }
-
-
+/*
+void move_children_in_folder(char* folderName, void* fromPtnPtr, void* toPtnPtr, int ptnSize){
+	file_handler* folderHandlerPtr = open_file(folderName, fromPtnPtr, 'w');
+	char* charParserPtr = convert_offset_to_curr_pos_ptr(fromPtnPtr, folderHandlerPtr);
+	md** mdPtrParserPtr = (md**) charParserPtr;
+	for(int i = 0; i < MAX_NUM_FILES; i++){
+		if(mdPtrParserPtr[i] != NULL && mdPtrParserPtr[i]->valid == 1){
+			move_to_partition(mdPtrParserPtr[i]->name, fromPtnPtr, toPtnPtr, ptnSize);
+		}
+	}
+}*/

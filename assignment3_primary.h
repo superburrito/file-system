@@ -259,12 +259,44 @@ file_handler* rewind_handler(file_handler* fileHandlerPtr){
 
 
 int move_to_partition(char* fileName, void* fromPtnPtr, void* toPtnPtr, int ptnSize){
-	printf("[MOVING ACROSS PTNS] Moving %s to another partition...\n", fileName);
+	printf("[MOVE] Moving %s to another partition...\n", fileName);
 	md* fileMdPtr = find_matching_md(fromPtnPtr, fileName);
 	
+	// If file is a folder
+	/*if(fileMdPtr->rwef % 10 ==1){
+		move_children_in_folder(fileName, fromPtnPtr, toPtnPtr, ptnSize);
+	}*/	
 
 	int recreatedSize = fileMdPtr->size;
 	return recreate(fileName, recreatedSize, fromPtnPtr, toPtnPtr, ptnSize);
+}
+
+int new_parent(char* fileName, char* fromParentName, char* toParentName, void* ptnPtr){
+	printf("[MOVE] Moving %s to another folder...\n", fileName);
+	md* fileMdPtr = find_matching_md(ptnPtr, fileName);
+	remove_child_from_folder(fromParentName, ptnPtr, fileMdPtr);
+	add_child_to_folder(toParentName, ptnPtr, fileMdPtr);
+	md* newParentMdPtr = find_matching_md(ptnPtr, toParentName);
+	// Update shifted file's own metadata details
+	fileMdPtr->parentMdPtr = newParentMdPtr;
+	fileMdPtr->modifiedAt = time(NULL);
+
+	// Create buffers that will form the new name
+	char newNameBuffer[MAX_FILE_NAME_SIZE];
+	memset(newNameBuffer, '\0', MAX_FILE_NAME_SIZE);
+	char lastPathSegmentBuffer[MAX_FILE_NAME_SIZE];
+
+	// Add new parent's directory to the new name
+	strcat(newNameBuffer, newParentMdPtr->name);
+	// Add a '/' to the new name
+	strcat(newNameBuffer, "/");
+	// Add last path segment of current file (i.e. a.txt) to the new name
+	get_last_path_segment(fileName, lastPathSegmentBuffer);
+	strcat(newNameBuffer, lastPathSegmentBuffer);
+	// Load buffer into metadata block
+	strcpy(fileMdPtr->name, newNameBuffer);
+
+	return 0;
 }
 
 
