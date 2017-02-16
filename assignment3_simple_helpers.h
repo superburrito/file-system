@@ -7,6 +7,8 @@
 #include <assert.h> // assert
 #include "assignment3_defs.h" // md, md_snap, my_file_system
 
+// Simple helper functions 
+
 // Get the number of valid files
 // i.e. number of valid metadata (md) blocks
 int count_valid_md_blocks(void* ptnPtr){
@@ -215,29 +217,6 @@ int calculate_free_bytes(void* ptnPtr, int ptnSize){
 }
 
 
-// Helper that relies on primary functions
-// Recreates a file by storing its data, deleting it and re-creating it.
-// Invoked by move_to_partition and sometimes, extend_file
-int recreate(char* fileName, int recreatedSize, void* fromPtnPtr, void* toPtnPtr, int ptnSize){
-	printf("[RE-CREATE] Recreating %s...\n", fileName);
-	// 1. Reading and Copying
-	md* fileMdPtr = find_matching_md(fromPtnPtr, fileName);
-	int copySize = fileMdPtr->size;
-	int copyRwef = fileMdPtr->rwef;
-	char buffer[copySize];
-	file_handler* fileHandlerForReading = open_file(fileName, fromPtnPtr, 'r');
-	read_file(fileHandlerForReading, buffer, copySize, fromPtnPtr);
-	close_file(fileHandlerForReading);
-	// 2. Deleting
-	delete_file(fileName, fromPtnPtr);
-	// 3. Creating
-	create_file(fileName, recreatedSize, toPtnPtr, ptnSize, copyRwef);
-	// 4. Writing
-	file_handler* fileHandlerForWriting = open_file(fileName, toPtnPtr, 'w');
-	write_file(fileHandlerForWriting, buffer, copySize, toPtnPtr, ptnSize);
-	close_file(fileHandlerForWriting);
-	return 0;
-}
 
 
 // Give a filename, determines how many parents the file should have
@@ -328,56 +307,3 @@ void get_last_path_segment(const char* fileName, char* lastPathSegmentBuffer){
 	printf("[DIR CHECK] Last path segment of %s is %s\n", fileName, lastPathSegmentBuffer);
 }
 
-// Adds a child's metadata ptr inside a folder's internal storage
-void add_child_to_folder(char* folderName, void* ptnPtr, md* childMdPtr){
-	file_handler* folderHandlerPtr = open_file(folderName, ptnPtr, 'w');
-	char* charParserPtr = convert_offset_to_curr_pos_ptr(ptnPtr, folderHandlerPtr);
-	md** mdPtrParserPtr = (md**) charParserPtr; 
-	for(int i = 0; i < MAX_NUM_FILES; i++){
-		if(mdPtrParserPtr[i] == NULL || mdPtrParserPtr[i]->valid == 0){
-			mdPtrParserPtr[i] = childMdPtr;
-			break;
-		}		
-	}
-	close_file(folderHandlerPtr);
-}
-
-// Removes a child's metadata inside a folder's internal storage
-void remove_child_from_folder(char* folderName, void* ptnPtr, md* childMdPtr){
-	file_handler* folderHandlerPtr = open_file(folderName, ptnPtr, 'w');
-	char* charParserPtr = convert_offset_to_curr_pos_ptr(ptnPtr, folderHandlerPtr);
-	md** mdPtrParserPtr = (md**) charParserPtr; 
-	for(int i = 0; i < MAX_NUM_FILES; i++){
-		if(mdPtrParserPtr[i] != NULL &&
-		   mdPtrParserPtr[i]->valid == 1 &&
-		   mdPtrParserPtr[i]->name == childMdPtr->name){
-			mdPtrParserPtr[i] = NULL;
-			break;
-		}		
-	}
-	close_file(folderHandlerPtr);
-}
-
-// Nullifies all valid metadata ptrs inside a folder's internal storage 
-void delete_children_in_folder(char* folderName, void* ptnPtr){
-	file_handler* folderHandlerPtr = open_file(folderName, ptnPtr, 'w');
-	char* charParserPtr = convert_offset_to_curr_pos_ptr(ptnPtr, folderHandlerPtr);
-	md** mdPtrParserPtr = (md**) charParserPtr;
-	for(int i = 0; i < MAX_NUM_FILES; i++){
-		if(mdPtrParserPtr[i] != NULL && mdPtrParserPtr[i]->valid == 1){
-			delete_file(mdPtrParserPtr[i]->name, ptnPtr);
-			mdPtrParserPtr[i] = NULL;
-		}
-	}
-}
-/*
-void move_children_in_folder(char* folderName, void* fromPtnPtr, void* toPtnPtr, int ptnSize){
-	file_handler* folderHandlerPtr = open_file(folderName, fromPtnPtr, 'w');
-	char* charParserPtr = convert_offset_to_curr_pos_ptr(fromPtnPtr, folderHandlerPtr);
-	md** mdPtrParserPtr = (md**) charParserPtr;
-	for(int i = 0; i < MAX_NUM_FILES; i++){
-		if(mdPtrParserPtr[i] != NULL && mdPtrParserPtr[i]->valid == 1){
-			move_to_partition(mdPtrParserPtr[i]->name, fromPtnPtr, toPtnPtr, ptnSize);
-		}
-	}
-}*/

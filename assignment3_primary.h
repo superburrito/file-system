@@ -1,4 +1,7 @@
-#include "assignment3_helpers.h"
+#include "assignment3_complex_helpers.h"
+
+// Primary functions...
+
 
 my_file_system* create_new_file_system(unsigned int s){
 	printf("[INIT] File system created with partitions of size: %d\n", s);
@@ -135,6 +138,15 @@ file_handler* open_file(char* fileName, void* ptnPtr, char openType){
 	printf("[OPEN] Opening %s...\n", fileName);
 	ensure_file_exists(ptnPtr, fileName);
 	md* matchingMdPtr = find_matching_md(ptnPtr, fileName);
+	
+	// Verify that the file is readable/writable
+	if(openType == 'r'){
+		assert(matchingMdPtr->rwef >= 1000);
+	}
+	if(openType == 'w'){
+		assert(matchingMdPtr->rwef % 1000 >= 100);
+	}
+
 	// Create a new fileHandler and return it
 	file_handler* newFileHandlerPtr = malloc(sizeof(file_handler));
 	strcpy(newFileHandlerPtr->name, matchingMdPtr->name);
@@ -261,14 +273,15 @@ file_handler* rewind_handler(file_handler* fileHandlerPtr){
 int move_to_partition(char* fileName, void* fromPtnPtr, void* toPtnPtr, int ptnSize){
 	printf("[MOVE] Moving %s to another partition...\n", fileName);
 	md* fileMdPtr = find_matching_md(fromPtnPtr, fileName);
-	
-	// If file is a folder
-	/*if(fileMdPtr->rwef % 10 ==1){
-		move_children_in_folder(fileName, fromPtnPtr, toPtnPtr, ptnSize);
-	}*/	
-
-	int recreatedSize = fileMdPtr->size;
-	return recreate(fileName, recreatedSize, fromPtnPtr, toPtnPtr, ptnSize);
+	// 1. Copy the file to the new partition
+	// 1.1 Copy parent
+	copy(fileName, fromPtnPtr, toPtnPtr, ptnSize);
+	// 1.2 Copy children
+	if(fileMdPtr->rwef % 10 == 1){
+		copy_children(fileName, fromPtnPtr, toPtnPtr, ptnSize);
+	}
+	// 2. Delete the file (recursively if applicable)
+	delete_file(fileName, fromPtnPtr);
 }
 
 int new_parent(char* fileName, char* fromParentName, char* toParentName, void* ptnPtr){
@@ -296,6 +309,36 @@ int new_parent(char* fileName, char* fromParentName, char* toParentName, void* p
 	// Load buffer into metadata block
 	strcpy(fileMdPtr->name, newNameBuffer);
 
+	// If file is a folder
+	if(fileMdPtr->rwef % 10 == 1){
+		new_parent_for_children(fileName, fromParentName, toParentName, ptnPtr);
+	}	
+	return 0;
+}
+
+int move_to_root(char* fileName, char* fromParentName, void* ptnPtr){
+	printf("[MOVE] Moving %s to root...\n", fileName);
+	md* fileMdPtr = find_matching_md(ptnPtr, fileName);
+	remove_child_from_folder(fromParentName, ptnPtr, fileMdPtr);
+	// Update shifted file's own metadata details
+	fileMdPtr->parentMdPtr = NULL;
+	fileMdPtr->modifiedAt = time(NULL);
+
+	// Create buffers that will form the new name
+	char newNameBuffer[MAX_FILE_NAME_SIZE];
+	memset(newNameBuffer, '\0', MAX_FILE_NAME_SIZE);
+	char lastPathSegmentBuffer[MAX_FILE_NAME_SIZE];
+	// Add a '/' to the new name
+	strcat(newNameBuffer, "/");
+	// Add last path segment of current file (i.e. a.txt) to the new name
+	get_last_path_segment(fileName, lastPathSegmentBuffer);
+	strcat(newNameBuffer, lastPathSegmentBuffer);
+	// Load buffer into metadata block
+	strcpy(fileMdPtr->name, newNameBuffer);
+	// If file is a folder
+	if(fileMdPtr->rwef % 10 == 1){
+		move_children_to_root(fileName, ptnPtr);
+	}	
 	return 0;
 }
 
@@ -322,9 +365,8 @@ int extend_file(char* fileName, int newSize, void* ptnPtr, int ptnSize){
 	//      Create a new file with the same name, write the buffer into it.      
 	} else {
 		printf("[EXTEND] No more spare space in %s. Deleting and re-creating...\n", fileName);
-		// Here, we can actually simply invoke the move_to_partition function 
-		// by making the from- and to- partition the same
-		return recreate(fileName, newSize, ptnPtr, ptnPtr, ptnSize);
+		// Here, invoke the incredible recreate helper function  
+		return recreate(fileName, newSize, ptnPtr, ptnSize);
 	}
 
 	// Update modifiedAt time and return

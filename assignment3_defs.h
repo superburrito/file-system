@@ -50,21 +50,8 @@ typedef struct {
 #define MD_TABLE_SIZE			(sizeof(md) * MAX_NUM_FILES) // 560
 #define MAX_FOLDER_SIZE			(sizeof(md*) * MAX_NUM_FILES) // 80
 
-// Prototypes of Primary Functions
-my_file_system* create_new_file_system(unsigned int s);
-int save_partition(void* ptnPtr, int ptnSize, char* fileName);
-void* load_partition(int ptnSize, char* fileName);
-int create_file(char* fileName, int fileSize, void* ptnPtr, int ptnSize, int rwef);
-file_handler* open_file(char* fileName, void* ptnPtr, char openType);
-int close_file(file_handler* fileHandlerPtr);
-int delete_file(char* fileName, void* ptnPtr);
-void* read_file(file_handler* fileHandlerPtr, void* buffer, int numBytes, void* ptnPtr);
-int write_file(file_handler* fileHandlerPtr, void* buffer, int numBytes, void* ptnPtr, int ptnSize);
-int move_to_partition(char* fileName, void* fromPtnPtr, void* toPtnPtr, int ptnSize);
-int extend_file(char* fileName, int newSize, void* ptnPtr, int ptnSize);
 
-
-// Prototypes of Secondary/Helper Functions
+// Prototypes of Simple Helper Functions
 int count_valid_md_blocks(void* ptnPtr);
 int cmp_func (const void* a, const void* b);
 md* find_empty_md_block(void* ptnPtr);
@@ -79,11 +66,37 @@ void list_files_in_order(void* ptnPtr);
 void print_md(md* mdPtr);
 int defragment(void* ptnPtr);
 int calculate_free_bytes(void* ptnPtr, int ptnSize);
-int recreate(char* fileName, int recreatedSize, void* fromPtnPtr, void* toPtnPtr, int ptnSize);
+int count_parents(const char* fileName);
+void check_parents(const char* fileName, void* ptnPtr, int numOfParents);
+void get_parent_path(const char* fileName, char* parentNameBuffer, int numOfParents);
+void get_last_path_segment(const char* fileName, char* lastPathSegmentBuffer);
+
+
+
+// Prototypes of Complex Helper Functions
+int recreate(char* fileName, int recreatedSize, void* ptnPtr, int ptnSize);
+int copy(char* fileName, void* fromPtnPtr, void* toPtnPtr, int ptnSize);
+void copy_children(char* folderName, void* fromPtnPtr, void* toPtnPtr, int ptnSize);
 void add_child_to_folder(char* folderName, void* ptnPtr, md* childMdPtr);
 void remove_child_from_folder(char* folderName, void* ptnPtr, md* childMdPtr);
 void delete_children_in_folder(char* folderName, void* ptnPtr);
+void new_parent_for_children(char* folderName, char* fromParentName, char* toParentName, void* ptnPtr);
+void move_children_to_root(char* folderName, void* ptnPtr);
 
 
+// Prototypes of Primary Functions
+my_file_system* create_new_file_system(unsigned int s);
+int save_partition(void* ptnPtr, int ptnSize, char* fileName);
+void* load_partition(int ptnSize, char* fileName);
+int create_file(char* fileName, int fileSize, void* ptnPtr, int ptnSize, int rwef);
+file_handler* open_file(char* fileName, void* ptnPtr, char openType);
+int close_file(file_handler* fileHandlerPtr);
+int delete_file(char* fileName, void* ptnPtr);
+void* read_file(file_handler* fileHandlerPtr, void* buffer, int numBytes, void* ptnPtr);
+int write_file(file_handler* fileHandlerPtr, void* buffer, int numBytes, void* ptnPtr, int ptnSize);
+int move_to_partition(char* fileName, void* fromPtnPtr, void* toPtnPtr, int ptnSize);
+int extend_file(char* fileName, int newSize, void* ptnPtr, int ptnSize);
+int new_parent(char* fileName, char* fromParentName, char* toParentName, void* ptnPtr);
+int move_to_root(char* fileName, char* fromParentName, void* ptnPtr);
 
 

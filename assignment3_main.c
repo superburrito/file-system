@@ -13,9 +13,10 @@ int main(void){
 	
 	// Create folder
 	printf("\n");
-	printf("***** CREATING AND WRITING INTO f1/f2/a.txt *****\n");
+	printf("***** CREATING AND WRITING INTO /f1/f2/a.txt *****\n");
 	create_folder("/f1", myFileSysPtr->first_partition, myFileSysPtr->size, 1111);
 	create_folder("/f1/f2", myFileSysPtr->first_partition, myFileSysPtr->size, 1111);
+	create_folder("/f3", myFileSysPtr->first_partition, myFileSysPtr->size, 1111);
 	create_file("/f1/f2/a.txt", 512, myFileSysPtr->first_partition, myFileSysPtr->size, 1110);
 	// Open the file and write to it
 	char bufferForWritingA[50];
@@ -43,11 +44,11 @@ int main(void){
 
 	// Create another file, open and write to it
 	printf("\n");
-	printf("***** CREATING AND WRITING TO /b.txt *****\n");
-	create_file("/b.txt", 1024, myFileSysPtr->first_partition, myFileSysPtr->size, 1110);
+	printf("***** CREATING AND WRITING TO /f3/b.txt *****\n");
+	create_file("/f3/b.txt", 1024, myFileSysPtr->first_partition, myFileSysPtr->size, 1110);
 	char bufferForWritingB[50];
 	strcpy(bufferForWritingB, "World");
-	file_handler* myFileHandlerPtrBW = open_file("/b.txt", myFileSysPtr->first_partition, 'w');
+	file_handler* myFileHandlerPtrBW = open_file("/f3/b.txt", myFileSysPtr->first_partition, 'w');
 	write_file(myFileHandlerPtrBW, bufferForWritingB, 6, myFileSysPtr->first_partition, myFileSysPtr->size);
 	close_file(myFileHandlerPtrBW);
 
@@ -58,13 +59,13 @@ int main(void){
 	
 	printf("\n");
 	printf("***** EXTENDING /b.txt TWICE *****\n");
-	extend_file("/b.txt", 1100, myFileSysPtr->first_partition, myFileSysPtr->size);
-	extend_file("/b.txt", 1500, myFileSysPtr->first_partition, myFileSysPtr->size);
+	extend_file("/f3/b.txt", 1100, myFileSysPtr->first_partition, myFileSysPtr->size);
+	extend_file("/f3/b.txt", 1500, myFileSysPtr->first_partition, myFileSysPtr->size);
 
 
 	printf("\n");
-	printf("***** MOVING /b.txt TO ANOTHER PARTITION *****\n");
-	move_to_partition("/b.txt", myFileSysPtr->first_partition, myFileSysPtr->second_partition, myFileSysPtr->size);
+	printf("***** MOVING /f3 TO ANOTHER PARTITION (recursive) *****\n");
+	move_to_partition("/f3", myFileSysPtr->first_partition, myFileSysPtr->second_partition, myFileSysPtr->size);
 	list_files_in_order(myFileSysPtr->first_partition);
 	list_files_in_order(myFileSysPtr->second_partition);
 
@@ -75,10 +76,17 @@ int main(void){
 	list_files_in_order(myFileSysPtr->second_partition);
 
 	printf("\n");
+	printf("***** MOVING /f1/a.txt TO ROOT *****\n");
+	move_to_root("/f1/a.txt", "/f1", myFileSysPtr->first_partition);
+	list_files_in_order(myFileSysPtr->first_partition);
+	list_files_in_order(myFileSysPtr->second_partition);
+
+	printf("\n");
 	printf("***** REMOVING FOLDER /f1 (recursive) *****\n");
 	delete_file("/f1", myFileSysPtr->first_partition);
 	list_files_in_order(myFileSysPtr->first_partition);
 	list_files_in_order(myFileSysPtr->second_partition);
+
 
 
 	return 0;
